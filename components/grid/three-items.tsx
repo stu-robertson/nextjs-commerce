@@ -1,5 +1,6 @@
 import { GridTileImage } from 'components/grid/tile';
 import { getCollectionProducts } from 'lib/shopify';
+import { getCollectionProductsQuery } from 'lib/shopify/queries'
 import type { Product } from 'lib/shopify/types';
 import Link from 'next/link';
 
@@ -46,6 +47,7 @@ export async function ThreeItemGrid() {
   const homepageItems = await getCollectionProducts({
     collection: 'hidden-homepage-featured-items'
   });
+
 
   if (!homepageItems[0] || !homepageItems[1] || !homepageItems[2]) return null;
 

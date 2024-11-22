@@ -270,3 +270,37 @@ export type ShopifyProductsOperation = {
     sortKey?: string;
   };
 };
+
+
+
+export interface MockApiProduct {
+  // The product title from the Django-Oscar API.
+  title: string;
+
+  // The product class information containing the slug.
+  productClass?: {
+    // A unique slug for the product, used for SEO-friendly URLs.
+    slug?: string;
+  };
+}
+
+export interface MockProduct {
+  // The product title, mapped directly from ApiProduct.title.
+  title: string;
+
+  // The slug for SEO-friendly URLs, mapped from ApiProduct.productClass.slug.
+  slug: string;
+
+  // Mock data for the featured image. ? Allows data to be missing without breaking things
+  featuredImage?: {
+    url: string;
+  };
+
+  // Mock data for the product's price range.
+  priceRange?: {
+    maxVariantPrice?: {
+      amount: string;
+      currencyCode: string;
+    };
+  };
+}

@@ -1,3 +1,9 @@
+import { mockCollectionProducts, mockProductData } from 'lib/mock-data';
+import { customApiFetch } from './custom-api-fetch'; // Ensure this path is correct
+import { MockApiProduct, MockProduct, Product } from './types';
+import { USE_MOCK_DATA } from 'lib/constants'; // Ensure USE_MOCK_DATA is correctly exported
+
+
 import { HIDDEN_PRODUCT_TAG, SHOPIFY_GRAPHQL_API_ENDPOINT, TAGS } from 'lib/constants';
 import { isShopifyError } from 'lib/type-guards';
 import { ensureStartsWith } from 'lib/utils';
@@ -285,32 +291,95 @@ export async function getCollection(handle: string): Promise<Collection | undefi
   return reshapeCollection(res.body.data.collection);
 }
 
+// export async function getCollectionProducts({
+//   collection,
+//   reverse,
+//   sortKey
+// }: {
+//   collection: string;
+//   reverse?: boolean;
+//   sortKey?: string;
+// }): Promise<Product[]> {
+//   const res = await shopifyFetch<ShopifyCollectionProductsOperation>({
+//     query: getCollectionProductsQuery,
+//     tags: [TAGS.collections, TAGS.products],
+//     variables: {
+//       handle: collection,
+//       reverse,
+//       sortKey: sortKey === 'CREATED_AT' ? 'CREATED' : sortKey
+//     }
+//   });
+
+//   if (!res.body.data.collection) {
+//     console.log(`No collection found for \`${collection}\``);
+//     return [];
+//   }
+
+//   return reshapeProducts(removeEdgesAndNodes(res.body.data.collection.products));
+// }
+
+//  import { customApiFetch } from './custom-api-fetch.ts'; // Adjust path if needed
+// import { getCollectionProductsQuery } from './queries/collection';
+import { Product, MockApiProduct } from './types';
+
+
 export async function getCollectionProducts({
   collection,
   reverse,
-  sortKey
+  sortKey,
 }: {
   collection: string;
   reverse?: boolean;
   sortKey?: string;
 }): Promise<Product[]> {
-  const res = await shopifyFetch<ShopifyCollectionProductsOperation>({
-    query: getCollectionProductsQuery,
-    tags: [TAGS.collections, TAGS.products],
-    variables: {
-      handle: collection,
-      reverse,
-      sortKey: sortKey === 'CREATED_AT' ? 'CREATED' : sortKey
-    }
-  });
-
-  if (!res.body.data.collection) {
-    console.log(`No collection found for \`${collection}\``);
-    return [];
+  if (USE_MOCK_DATA) {
+    // Use mock data for development
+    return mockCollectionProducts.map((mockProduct, index) => ({
+      title: mockProduct.title || `Mock Product ${index + 1}`,
+      slug: mockProduct.slug || `mock-product-${index + 1}`,
+      featuredImage: mockProduct.featuredImage,
+      priceRange: mockProduct.priceRange,
+    }));
   }
 
-  return reshapeProducts(removeEdgesAndNodes(res.body.data.collection.products));
+  try {
+    // Fetch data from your Django-Oscar API
+    const res = await customApiFetch<{
+      data: {
+        collection: {
+          products: {
+            edges: { node: MockApiProduct }[];
+          };
+        };
+      };
+    }>({
+      query: getCollectionProductsQuery,
+      variables: { handle: collection },
+    });
+
+    // Ensure collection exists
+    if (!res.body.data.collection) {
+      console.error(`No collection found for \`${collection}\``);
+      return [];
+    }
+
+    // Map API response to Product type
+    const apiProducts = res.body.data.collection.products.edges.map((edge) => edge.node);
+
+    return apiProducts.map((apiProduct) => ({
+      title: apiProduct.title,
+      slug: apiProduct.productClass.slug,
+      featuredImage: { url: '/placeholder-image.jpg' }, // Replace with actual image logic
+      priceRange: {
+        maxVariantPrice: { amount: '29.99', currencyCode: 'USD' }, // Mocked price range
+      },
+    }));
+  } catch (error) {
+    console.error('Error fetching collection products:', error);
+    return [];
+  }
 }
+
 
 export async function getCollections(): Promise<Collection[]> {
   const res = await shopifyFetch<ShopifyCollectionsOperation>({
