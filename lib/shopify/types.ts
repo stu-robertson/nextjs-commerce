@@ -284,7 +284,7 @@ export interface MockApiProduct {
   };
 }
 
-export interface MockProduct {
+export interface Product {
   // The product title, mapped directly from ApiProduct.title.
   title: string;
 

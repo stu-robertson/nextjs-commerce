@@ -320,65 +320,72 @@ export async function getCollection(handle: string): Promise<Collection | undefi
 
 //  import { customApiFetch } from './custom-api-fetch.ts'; // Adjust path if needed
 // import { getCollectionProductsQuery } from './queries/collection';
-import { Product, MockApiProduct } from './types';
 
 
-export async function getCollectionProducts({
-  collection,
-  reverse,
-  sortKey,
-}: {
-  collection: string;
-  reverse?: boolean;
-  sortKey?: string;
-}): Promise<Product[]> {
-  if (USE_MOCK_DATA) {
-    // Use mock data for development
-    return mockCollectionProducts.map((mockProduct, index) => ({
-      title: mockProduct.title || `Mock Product ${index + 1}`,
-      slug: mockProduct.slug || `mock-product-${index + 1}`,
-      featuredImage: mockProduct.featuredImage,
-      priceRange: mockProduct.priceRange,
-    }));
-  }
+export async function getCollectionProducts(): Promise<Product[]> {
+  const mockData = mockCollectionProducts.map((mockProduct, index) => ({
+    title: mockProduct.title || `Mock Product ${index + 1}`, // Default fallback mock title
+    slug: mockProduct.slug || `mock-product-${index + 1}`,
+    featuredImage: mockProduct.featuredImage || { url: '/placeholder-image.jpg' },
+    priceRange: mockProduct.priceRange || {
+      maxVariantPrice: { amount: '29.99', currencyCode: 'USD' },
+    },
+  }));
+
+  const backendBaseUrl = process.env.BACKEND_BASE_URL || 'http://127.0.0.1:8000'; // Replace with actual base URL
 
   try {
-    // Fetch data from your Django-Oscar API
+    // Fetch product titles and images from the API
     const res = await customApiFetch<{
       data: {
-        collection: {
-          products: {
-            edges: { node: MockApiProduct }[];
-          };
+        products: {
+          edges: { node: { title: string; primaryImage: string } }[];
         };
       };
     }>({
-      query: getCollectionProductsQuery,
-      variables: { handle: collection },
+      query: `query GetCollectionProducts {
+        products(first: 3) {
+          edges {
+            node {
+              title
+              primaryImage
+            }
+          }
+        }
+      }`,
     });
 
-    // Ensure collection exists
-    if (!res.body.data.collection) {
-      console.error(`No collection found for \`${collection}\``);
-      return [];
-    }
+    // Extract product titles and images from API response
+    const apiProducts = res.body.data.products.edges.map((edge) => ({
+      title: edge.node.title,
+      primaryImage: edge.node.primaryImage
+        ? `${backendBaseUrl}${edge.node.primaryImage}` // Prepend backend base URL
+        : '/placeholder-image.jpg', // Fallback image
+    }));
 
-    // Map API response to Product type
-    const apiProducts = res.body.data.collection.products.edges.map((edge) => edge.node);
+    // Debug: Log the API product data
+    console.log('API Products:', apiProducts);
 
-    return apiProducts.map((apiProduct) => ({
-      title: apiProduct.title,
-      slug: apiProduct.productClass.slug,
-      featuredImage: { url: '/placeholder-image.jpg' }, // Replace with actual image logic
-      priceRange: {
-        maxVariantPrice: { amount: '29.99', currencyCode: 'USD' }, // Mocked price range
+    // Map API data onto mock data
+    const combinedData = mockData.map((mockProduct, index) => ({
+      ...mockProduct,
+      title: apiProducts[index]?.title || mockProduct.title, // Use API title if available
+      featuredImage: {
+        url: apiProducts[index]?.primaryImage || mockProduct.featuredImage.url, // Use API image if available
       },
     }));
+
+    // Debug: Log the final combined data
+    console.log('Combined Product Data:', combinedData);
+
+    return combinedData;
   } catch (error) {
-    console.error('Error fetching collection products:', error);
-    return [];
+    console.error('Error fetching product data from API:', error);
+    console.log('Returning fallback mock data:', mockData); // Debug fallback
+    return mockData; // Fallback to mock data
   }
 }
+
 
 
 export async function getCollections(): Promise<Collection[]> {

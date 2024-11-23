@@ -1,4 +1,4 @@
-// lib/shopify/customApiFetch.ts
+// lib/shopify/custom-api-fetch.ts
 
 import { OSCAR_GRAPHQL_API_ENDPOINT, CUSTOM_API_ACCESS_TOKEN } from 'lib/constants'; // Define these in your constants file
 
