@@ -3,7 +3,6 @@ import { customApiFetch } from './custom-api-fetch'; // Ensure this path is corr
 import { MockApiProduct, MockProduct, Product } from './types';
 import { USE_MOCK_DATA } from 'lib/constants'; // Ensure USE_MOCK_DATA is correctly exported
 
-
 import { HIDDEN_PRODUCT_TAG, SHOPIFY_GRAPHQL_API_ENDPOINT, TAGS } from 'lib/constants';
 import { isShopifyError } from 'lib/type-guards';
 import { ensureStartsWith } from 'lib/utils';
@@ -335,44 +334,96 @@ export async function getCollectionProducts(): Promise<Product[]> {
   const backendBaseUrl = process.env.BACKEND_BASE_URL || 'http://127.0.0.1:8000'; // Replace with actual base URL
 
   try {
-    // Fetch product titles and images from the API
+    // Fetch product titles, images, and prices from the API
     const res = await customApiFetch<{
       data: {
-        products: {
-          edges: { node: { title: string; primaryImage: string } }[];
+        partners: {
+          edges: {
+            node: {
+              stockrecords: {
+                edges: {
+                  node: {
+                    product: {
+                      id: string;
+                      title: string;
+                      primaryImage: string | null;
+                    };
+                    price: string;
+                    priceCurrency: string;
+                  };
+                }[];
+              };
+            };
+          }[];
         };
       };
     }>({
-      query: `query GetCollectionProducts {
-        products(first: 3) {
-          edges {
-            node {
-              title
-              primaryImage
+      query: `
+        query GetCollectionProducts {
+          partners {
+            edges {
+              node {
+                stockrecords {
+                  edges {
+                    node {
+                      product {
+                        id
+                        title
+                        primaryImage
+                      }
+                      price
+                      priceCurrency
+                    }
+                  }
+                }
+              }
             }
           }
         }
-      }`,
+      `,
     });
 
-    // Extract product titles and images from API response
-    const apiProducts = res.body.data.products.edges.map((edge) => ({
-      title: edge.node.title,
-      primaryImage: edge.node.primaryImage
-        ? `${backendBaseUrl}${edge.node.primaryImage}` // Prepend backend base URL
-        : '/placeholder-image.jpg', // Fallback image
-    }));
+    // Flatten the response and deduplicate products by `id`
+    const apiProductsMap = new Map<string, Product>();
+    res.body.data.partners.edges.forEach((partner) => {
+      partner.node.stockrecords.edges.forEach((stock) => {
+        const { product, price, priceCurrency } = stock.node;
 
-    // Debug: Log the API product data
-    console.log('API Products:', apiProducts);
+        // Add the product to the map only if it's not already present
+        if (!apiProductsMap.has(product.id)) {
+          apiProductsMap.set(product.id, {
+            title: product.title,
+            slug: product.id, // Placeholder for slug
+            featuredImage: {
+              url: product.primaryImage
+                ? `${backendBaseUrl}${product.primaryImage}`
+                : '/placeholder-image.jpg', // Fallback image
+            },
+            priceRange: {
+              maxVariantPrice: {
+                amount: price,
+                currencyCode: priceCurrency,
+              },
+            },
+          });
+        }
+      });
+    });
 
-    // Map API data onto mock data
+    // Convert the map to an array and take only the first 3 products
+    const apiProducts = Array.from(apiProductsMap.values()).slice(0, 3);
+
+    // Debug: Log the deduplicated API product data
+    console.log('Deduplicated API Products:', apiProducts);
+
+    // Combine API data with mock data
     const combinedData = mockData.map((mockProduct, index) => ({
       ...mockProduct,
       title: apiProducts[index]?.title || mockProduct.title, // Use API title if available
       featuredImage: {
-        url: apiProducts[index]?.primaryImage || mockProduct.featuredImage.url, // Use API image if available
+        url: apiProducts[index]?.featuredImage.url || mockProduct.featuredImage.url, // Use API image if available
       },
+      priceRange: apiProducts[index]?.priceRange || mockProduct.priceRange, // Use API price if available
     }));
 
     // Debug: Log the final combined data
@@ -385,6 +436,7 @@ export async function getCollectionProducts(): Promise<Product[]> {
     return mockData; // Fallback to mock data
   }
 }
+
 
 
 
